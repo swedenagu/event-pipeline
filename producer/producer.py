@@ -1,22 +1,17 @@
-import six
-import sys
-if sys.version_info >= (3, 12, 0):
-    sys.modules['kafka.vendor.six.moves'] = six.moves
-
-from kafka import KafkaProducer
+from confluent_kafka import Producer
 import json, uuid, random
 from datetime import datetime
 
 TOPIC = 'user-events'
 
-producer = KafkaProducer(
-    bootstrap_servers='localhost:9092',
-    value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-    key_serializer=lambda k: k.encode('utf-8') if k else None,
-    batch_size=65536,
-    linger_ms=10,
-    compression_type='lz4'
-)
+conf = {
+    'bootstrap.servers': 'kafka:29092',
+    'broker.address.family': 'v4',
+    'batch.size': 65536,
+    'linger.ms': 10,
+    'compression.type': 'lz4',
+}
+producer = Producer(conf)
 
 def generate_event():
     return {
@@ -29,12 +24,22 @@ def generate_event():
         "category": random.choice(["electronics", "clothing", "home"])
     }
 
+def delivery_report(err, msg):
+    if err is not None:
+        print(f'Delivery failed: {err}')
+
 def produce_events():
     count = 0
     try:
         while True:
             event = generate_event()
-            producer.send(TOPIC, key=event["event_id"], value=event)
+            producer.produce(
+                TOPIC,
+                key=event["event_id"],
+                value=json.dumps(event),
+                callback=delivery_report
+            )
+            producer.poll(0)  # triggers delivery callbacks for prior sends — non-blocking
             count += 1
             if count % 10000 == 0:
                 print(f"Produced {count} events")
@@ -42,7 +47,6 @@ def produce_events():
         pass
     finally:
         producer.flush()
-        producer.close()
 
 if __name__ == '__main__':
     produce_events()
