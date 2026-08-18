@@ -3,7 +3,7 @@
 CREATE DATABASE IF NOT EXISTS event_pipeline;
 
 -- Main events table - columnar vectorisation for optimized time-series analytics
-CREATE TABLE IF NOT EXISTS event_pipeline.events (
+CREATE TABLE IF NOT EXISTS event_pipeline.events_queue (
     event_id String,
     user_id String,
     event_type LowCardinality(String),
