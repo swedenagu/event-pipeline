@@ -12,7 +12,7 @@ services:
       KAFKA_LISTENERS:
         'PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092'
       KAFKA_ADVERTISED_LISTENERS:
-        'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+        'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://kafka:9092'
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:
         'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
@@ -59,6 +59,26 @@ services:
     volumes:
       - ./clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql
 
+  fix-permissions:
+    image: apache/spark-py:v3.4.0
+    user: root
+    volumes:
+      - ivy_cache:/opt/spark/.ivy2
+    entrypoint: ["sh", "-c", "chown -R 185:0 /opt/spark/.ivy2 && chmod -R g+w /opt/spark/.ivy2"]
+
+  spark-streaming:
+    build: ./spark
+    depends_on:
+      kafka:
+        condition: service_started
+      clickhouse:
+        condition: service_started
+      fix-permissions:
+        condition: service_completed_successfully
+    volumes:
+      - checkpoints:/opt/spark/spark/checkpoints
+      - ivy_cache:/opt/spark/.ivy2
+    restart: unless-stopped
   
   airflow-init:
     image: apache/airflow:2.10.2
@@ -118,3 +138,8 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@airflow-postgres/${POSTGRES_DB}
     command: scheduler
+
+volumes:
+  clickhouse-data:
+  checkpoints:
+  ivy_cache:
