@@ -1,0 +1,13 @@
+{
+    "type": "record",
+    "name": "UserEvent",
+    "fields": [
+        {"name": "event_id", "type": "string"},
+        {"name": "user_id", "type": "string"},
+        {"name": "event_type", "type": "string"},
+        {"name": "product_id", "type": "string"},
+        {"name": "price", "type": "float"},
+        {"name": "timestamp", "type": "long", "logicalType": "timestamp-millis"},
+        {"name": "category", "type": "string"}
+    ]
+}
