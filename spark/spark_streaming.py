@@ -28,9 +28,11 @@ enriched = parsed.withColumn("processed_at", current_timestamp())
 def write_to_clickhouse(batch_df, batch_id):
     batch_df.write \
         .format("jdbc") \
-        .option("url", "jdbc:clickhouse://clickhouse:8123/default") \
-        .option("dbtable", "events") \
+        .option("url", "jdbc:clickhouse://default:clickhouse@clickhouse:8123/event_pipeline") \
+        .option("dbtable", "events_queue") \
         .option("driver", "com.clickhouse.jdbc.ClickHouseDriver") \
+        .option("user", "default") \
+        .option("password", "clickhouse") \
         .mode("append") \
         .save()
 
