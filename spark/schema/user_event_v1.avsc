@@ -7,7 +7,7 @@
         {"name": "event_type", "type": "string"},
         {"name": "product_id", "type": "string"},
         {"name": "price", "type": "float"},
-        {"name": "timestamp", "type": "long", "logicalType": "timestamp-millis"},
+        {"name": "timestamp", "type": {"type": "long", "logicalType": "timestamp-millis"}},
         {"name": "category", "type": "string"}
     ]
 }

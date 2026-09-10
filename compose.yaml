@@ -3,6 +3,8 @@ services:
     image: confluentinc/cp-kafka:7.7.0
     hostname: kafka
     container_name: kafka
+    networks:
+      - bigdata
     ports:
       - "9092:9092"
     environment:
@@ -10,9 +12,9 @@ services:
       KAFKA_PROCESS_ROLES: 'broker,controller'
       KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
       KAFKA_LISTENERS:
-        'PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+        'PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092'
       KAFKA_ADVERTISED_LISTENERS:
-        'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+        'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://kafka:9092'
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:
         'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
@@ -24,11 +26,41 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
       KAFKA_NUM_PARTITIONS: 3
       CLUSTER_ID: $(CLUSTER_ID)
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      # test: ["CMD-SHELL", "exec 3<>/dev/tcp/kafka/29092 && exec 3>&-"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  kafka-init-topics:
+    image: confluentinc/cp-kafka:7.7.0
+    networks:
+      - bigdata
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    command: |
+      "
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 3 --replication-factor 1 --topic user-events
+      echo 'Topic user-events created successfully'
+      "
+
+  producer:
+    build: ./producer
+    networks:
+      - bigdata
+    depends_on:
+      kafka-init-topics:
+        condition: service_completed_successfully
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.7.0
     hostname: schema-registry
     container_name: schema-registry
+    networks:
+      - bigdata
     depends_on:
       - kafka
     ports:
@@ -43,11 +75,40 @@ services:
     ports:
       - "8123:8123"
       - "9000:9000"
+    networks:
+      - bigdata
     environment:
       CLICKHOUSE_PASSWORD: clickhouse
     volumes:
       - ./clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql
 
+  fix-permissions:
+    image: apache/spark-py:v3.4.0
+    user: root
+    networks:
+      - bigdata
+    volumes:
+      - ivy_cache:/opt/spark/.ivy2
+      # - checkpoints:/opt/spark/spark/checkpoints
+    entrypoint: ["sh", "-c", "chown -R 185:0 /opt/spark/.ivy2 && chmod -R g+w /opt/spark/.ivy2"]
+
+  spark-streaming:
+    build: ./spark
+    networks:
+      - bigdata
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init-topics:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_started
+      fix-permissions:
+        condition: service_completed_successfully
+    volumes:
+      - checkpoints:/opt/spark/spark/checkpoints
+      - ivy_cache:/opt/spark/.ivy2
+    restart: unless-stopped
   
   airflow-init:
     image: apache/airflow:2.10.2
@@ -107,3 +168,12 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@airflow-postgres/${POSTGRES_DB}
     command: scheduler
+
+networks:
+  bigdata:
+    driver: bridge
+
+volumes:
+  clickhouse-data:
+  checkpoints:
+  ivy_cache:

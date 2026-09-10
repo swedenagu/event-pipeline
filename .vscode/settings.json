@@ -3,7 +3,7 @@
         {
             "server": "http://localhost",
             "port": 8123,
-            "database": "default",
+            "database": "event_pipeline",
             "useJWT": false,
             "requestTimeout": 30000,
             "enableTls": false,
